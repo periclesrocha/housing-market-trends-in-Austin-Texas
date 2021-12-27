@@ -1,0 +1,765 @@
+---
+title: "A study of housing market trends in Austin, Texas"
+author: "STAT 420, Summer 2021, Team 42 PST"
+date: "08/08/2021"
+output:
+  html_document: 
+    theme: readable
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 5, digits = 4, width = 80, fig.align = "center")
+```
+
+# 1. Introduction
+
+The real estate market can be intimidating for anyone looking for a new home. For first time home buyers and experienced investors alike, news articles are citing that we're living through the hottest market in decades [^1]. 
+
+For many people, buying a house is one of the most important decisions they'll make in their lives [^2]. However, when is the right time to buy a house? Are prices high right now, and will they further increase? Should someone consider purchasing a house thinking the market may worsen? How does one maximize their investment by buying at the right time? By predicting the home value based on what we know historically from houses in the same profile, we can help an individual understand if the price is inflated or not, and help them determine if this is the right moment. 
+
+For this data analysis project, we will study the housing market in Austin, Texas, one of America's hottest real estate markets. By using historical data, we'll attempt to predict home prices using multiple linear regression, and apply methods discussed in class to find the best-possible prediction model.We believe that the trends in Austin can serve as a thermometer for the rest of the country due to high interest driven by the COVID-19 pandemic, which is shifting workers to home-offices [^3]. By using detailed historical data about properties that were sold in Austin in the past, our intent is to offer home buyers guidance to help them understand if the sale price for a house is within overall market expectation, helping them on the decision making process. 
+
+This project implements the following data analysis techniques and concepts: 
+
+- Data cleaning
+- Collinearity
+- Multiple linear regression
+- ANOVA
+- Interaction
+- Assumption diagnostics
+- Outlier diagnostics
+- Transformations
+- Stepwise model selection
+- Variable selection
+
+# 2. Dataset description and analysis 
+
+We gathered data from a large study [^4] based on Zillow listings that include the sale price of properties between the years 2018 and 2021 in Austin, Texas, and several variables that help describe the given properties. We will try to predict prices in the past, present, and also future trends based on those variables. 
+
+The data used in our study offers *15,171 observations* and *45 variables*. Following is the list of variables in the dataset:
+
+1. `zpid`: Unique Identifier or Property ID
+2. `city`: The lowercase name of a city or town in or surrounding Austin, Texas.
+3. `streetaddress`: The street address of the property.
+4. `zipcode`: The property's 5-digit ZIP code.
+5. `description`: The description of the property listing from Zillow.
+6. `latitude`: Latitude of the property.
+7. `longitude`: Longitude of the property.
+8. `propertyTaxRate`: Tax rate for the property.
+9. `garageSpaces`: Number of garage spaces. This is a subset of the `ParkingSpaces` feature.
+10. `hasAssociation`: Indicates if there is a Homeowners Association associated with the property.
+11. `hasCooling`: Boolean indicating if the property has a cooling system.
+12. `hasGarage`: Boolean indicating if the property has a garage.
+13. `hasHeating`: Boolean indicating if the property has a heating system.
+14. `hasSpa`: Boolean indicating if the property has a Spa.
+15. `hasView`: Boolean indicating if the property comes with a view.
+16. `homeType`: The home type (i.e., Single Family, Townhouse, Apartment).
+17. `parkingSpaces`: The number of parking spots.
+18. `yearBuilt`: The year the property was built.
+19. `numPriceChanges`: The number of price changes the property has undergone since being listed.
+20. `latest_saledate`: The latest sale date (YYYY-MM-DD).
+21. `latest_salemonth`: The month the property sold (1-12).
+22. `latest_saleyear`: The year the property sold (2018-2021). 
+23. `latestPriceSource`: The party that provided the sale price.
+24. `numOfPhotos`: The number of photos in the Zillow listing.
+25. `numOfAccessibilities`: The number of unique accessibility features in the property.
+26. `numOfAppliances`: The number of unique appliances in the property.
+27. `numOfParkingFeatures`: The number of unique parking features in the property.
+28. `numOfPatioAndPorts`: The number of unique patio and/or porch features in the property.
+29. `numOfSecurityFeatures`: The number of unique security features in the property.
+30. `numOfWaterFront`: The number of unique waterfront features in the property.
+31. `numOfUniqueWindowFeatures`: The number of unique window aesthetics in the property. 
+32. `numOfCommunityFeatures`: The number of unique community features (community meeting room, mailbox) in the property.
+33. `lotSizeSqFt`: The lot size of the property reported in square feet.
+34. `livingAreaSqFt`: The living area of the property reported in square feet.
+35. `numOfPrimarySchools`: The number of primary schools listed in the area on the listing.
+36. `numOfElementrySchools`: The number of elementary schools listed in the area on the listing.
+37. `numOfMiddleSchools`: The number of middle schools listed in the area on the listing.
+38. `numOfHighSchools`: The number of high schools listed in the area on the listing.
+39. `avgSchoolDistance`: The average distance of all school types (i.e., Middle, High) in the listing.
+40. `avgSchoolRating`: The average school rating of all school types (i.e., Middle, High) in the listing.
+41. `avgSchoolSize`: The average school size of all school types (i.e., Middle, High) in the listing.
+42. `MedianStudentsPerTeacher`: The median students-per-teacher for all schools near the listing.
+43. `numOfBathrooms`: The number of bathrooms in the property.
+44. `numOfBedrooms`: The number of bedrooms in the property.
+45. `numOfStories`: The number of stories in the property.
+
+## 2.1. Data cleaning
+
+Our first step will be to read the data from a csv file (`austinHousingData.csv`) and perform some data cleaning tasks: 
+
+- Remove rows with missing data.
+- The `homeType` variable has 10 different possible values (Apartment, Condo, Residential, etc). We'll make it a factor variable. 
+- Remove variables that will not be used in the analysis for lack of relevancy to the property price: `zpid`, `latest_saledate`, `latestPriceSource`, `city`, `homeImage`, `streetAddress`, and `numOfPhotos`.
+
+```{r, message=FALSE}
+raw_housing_data = read.csv("austinHousingData.csv")
+
+# remove all rows with missing data
+raw_housing_data = na.omit(raw_housing_data)
+
+# Make homeType a factor variable
+raw_housing_data$homeType = as.factor(raw_housing_data$homeType)
+
+# Remove predictors that are not used
+selected_housing_data = subset(
+  raw_housing_data,
+  select = -c(
+    zpid,
+    latest_salemonth,
+    latest_saledate,
+    latestPriceSource,
+    city,
+    homeImage,
+    streetAddress,
+    numOfPhotos
+  )
+)
+```
+
+Now that we've performed basic data cleaning tasks, let's take a look at the dataset. 
+
+```{r kable,message=FALSE}
+head(selected_housing_data)
+```
+
+We'll also look at the summary of the dataset to better understand the data ranges for each variable. This allows us to understand if some of the variables present abnormal max or min values when compared to the mean of that variable, helping to identify outliers which may cause noise in the dataset. 
+
+```{r}
+summary(selected_housing_data)
+```
+
+Some of the variables demonstrate strange min and max values when compared to their mean: `avgSchoolDistance`, `livingAreaSqFt`, `lotSizeSqFt`, `numOfBedrooms`, and `numOfBathrooms`. We'll plot the observations of these variables in charts to better understand if they are outliers.  
+
+```{r}
+data_visuals = function(data) {
+  par(mfrow = c(2, 3))
+  
+  plot(
+    latestPrice ~ homeType,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. homeType",
+    cex = 1.5
+  )
+  plot(
+    latestPrice ~ avgSchoolDistance  ,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. avgSchoolDistance  ",
+    cex = 1.5
+  )
+  plot(
+    latestPrice ~ livingAreaSqFt,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. livingAreaSqFt",
+    cex = 1.5
+  )
+  
+  plot(
+    latestPrice ~ lotSizeSqFt,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. lotSizeSqFt",
+    cex = 1.5
+  )
+  plot(
+    latestPrice ~ numOfBedrooms,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. numOfBedrooms",
+    cex = 1.5
+  )
+  plot(
+    latestPrice ~ numOfBathrooms,
+    data = data,
+    pch = 20,
+    col = "dodgerblue",
+    main = "latestPrice vs. numOfBathrooms",
+    cex = 1.5
+  )
+}
+
+data_visuals(selected_housing_data)
+```
+
+From the data structure and visuals, we see that there are significant outliers in the dataset. For instance, one observation has a `livingAreaSqft` value of *'109,292'*, compared to its mean *'2,208'*. We shall remove these outliers using boxplot stats. 
+
+```{r, warning=FALSE}
+for (x in c(
+  'homeType',
+  'latestPrice',
+  'avgSchoolDistance',
+  'livingAreaSqFt',
+  'lotSizeSqFt',
+  'numOfBedrooms',
+  'numOfBathrooms'
+))
+{
+  value = selected_housing_data[, x][selected_housing_data[, x] %in% boxplot.stats(selected_housing_data[, x])$out]
+  selected_housing_data[, x][selected_housing_data[, x] %in% value] = NA
+}
+
+# remove all rows with missing data
+selected_housing_data = na.omit(selected_housing_data
+)
+```
+
+Looking at the plots again, we confirm that the observations are better represented now, without outliers. 
+
+```{r, warning=FALSE}
+data_visuals(selected_housing_data)
+```
+
+The "cleaned" dataset now offers *11,493 observations* and *39 variables*.
+
+```{r, warning=FALSE}
+str(selected_housing_data)
+```
+
+Now that we have a clean dataset, without outliers, let's have a look at the distribution of property prices when plotted over the map of Austin. We notice that the most expensive houses are concentrated near the central part of Austin, with some exceptions for more prestigious areas. Overall, houses are in the $250,000 to $750,000 range. 
+
+```{r, warning=FALSE, message=FALSE}
+library(ggmap)
+library(ggplot2)
+
+# register google maps API key
+register_google(key = "AIzaSyAXuwivTHN6rIgi3teuusdz3r8dqNMQQx8")
+
+## Central co-ordinates of the region we are interested in.
+central_location = c(mean(selected_housing_data$longitude),
+                     mean(selected_housing_data$latitude))
+
+## Get map centered on Austin, TX (or the mean of the coordinates in our dataset)
+austin_map = ggmap(get_googlemap(
+  center = central_location,
+  scale = 1,
+  zoom = 10
+),
+extent = "normal")
+
+## Plot heatmap
+austin_map + geom_point(
+  aes(x = longitude, y = latitude, color = latestPrice),
+  data = selected_housing_data,
+  alpha = 0.4,
+  size = 3
+) + xlim(range(selected_housing_data$longitude)) + ylim(range(selected_housing_data$latitude)) + scale_color_distiller(palette = "Spectral", labels = scales::comma) + xlab("Longitude") + ylab("Latitude") + ggtitle("Heatmap: latest sale price ($ USD) by property")
+```
+
+## 2.2. Train-Test split
+
+We'll split our dataset into two data frames: one used for training, which will contain 25% of the observations, and one for testing, containing the remaining 75%.   
+
+```{r}
+set.seed(19870412)
+ratio = 0.25
+idx  = sample(nrow(selected_housing_data),
+              size = nrow(selected_housing_data) * ratio)
+housing_data_train = selected_housing_data[idx, ]
+housing_data_test = selected_housing_data[-idx, ]
+```
+
+## 2.3. Collinearity
+
+Next, we'll look at the variables in the dataset to investigate if there's multicollinearity.
+
+```{r}
+library(faraway)
+options(max.print = 1000000)
+
+# This is a helper function to get the top n items from a matrix.
+# Adjusted from https://stackoverflow.com/questions/32544566/find-the-largest-values-on-a-matrix-in-r
+
+nlargest = function(m, n = 10, sim = TRUE) {
+  mult = 1
+  
+  if (sim)
+    mult = 2
+  res = order(m, decreasing = TRUE)[seq_len(n) * mult]
+  pos = arrayInd(res, dim(m), useNames = TRUE)
+  list(values = m[res],
+       position = pos)
+}
+
+# A correlation cannot be computed for factor variables.So we'll create a copy of the data frame without the factor variables to run the collinearity analysis
+num_cols = unlist(lapply(housing_data_train, is.numeric))
+housing_data_numerical = housing_data_train[, num_cols]
+
+# Pairs won't work with more than 26 variables
+# pairs(housing_data_train[,1:26], col="dodgerblue")
+
+# run cor() and store results on a matrix
+(coll_matrix = round(cor(housing_data_numerical), 2))
+```
+
+We don't observe examples of collinearity between variables above 0.8, except for the relationship between `parkingSpaces` and `garageSpaces`. Remember that `parkingSpaces` is the number of parking spots, while `garageSpaces` represents the number of garage spaces as a subset of the `ParkingSpaces` variable. The latest may include additional parking spaces provided by common areas.
+
+The first reaction is to think that `parkingSpaces` and `garageSpaces` are the same. This is the case in almost all observations, except for 0.16% of the observations in the dataset. 
+
+```{r}
+#garageSpaces is not always the same as parkingSpaces
+spaces_different = housing_data_train$parkingSpaces != housing_data_train$garageSpaces
+
+# Proportion of observations where parkingSpaces is different than garageSpaces
+length(spaces_different[spaces_different == TRUE]) / length(spaces_different)
+```
+
+Therefore, we'll eliminate the `garageSpaces` variable from the dataset. 
+
+```{r}
+housing_data_train = subset(housing_data_train, select = -c(garageSpaces))
+```
+
+We'll further look for multicollinearity with the remaining variables. 
+
+```{r}
+num_cols = unlist(lapply(housing_data_train, is.numeric))
+housing_data_numerical = housing_data_train[, num_cols]
+coll_matrix = round(cor(housing_data_numerical), 2)
+```
+
+This matrix is extensive, and it may be easy to miss high values. So let's use a function to look at the highest values in the matrix. 
+
+```{r}
+# Look at the top values from coll_matrix that are different than 1: 
+nlargest(coll_matrix, n = 45)$values[nlargest(coll_matrix, n = 45)$values < 1]
+```
+
+We now see that there's no collinearity between variables that's higher than 0.8. Still, we can further investigate the model to see if there's any variables impacting the response at considerable rates when compared to the others. 
+
+```{r}
+housing_data_model = lm(latestPrice ~ ., data = housing_data_train)
+
+vif = vif(housing_data_model)
+sort(vif[which(vif > 5)], decreasing = TRUE)
+```
+
+the homeType predictor will be key in our analysis, so we've decided to keep it in the model. However, variable `hasGarage` shows a VIF greater than 5, which may be a concern. What proportion of the observed variation in latestPrice is explained by a linear relationship with `hasGarage`?
+
+```{r}
+summary(lm(hasGarage ~ . - latestPrice, data = housing_data_train))$r.squared
+
+housing_data_model_non_significant = lm(latestPrice ~ . - hasGarage, data = housing_data_train)
+vif_non_significant = vif(housing_data_model_non_significant)
+vif_non_significant[which(vif_non_significant > 5)]
+
+#Finally, compare both models
+(anova_results = anova(housing_data_model, housing_data_model_non_significant))
+```
+
+When we compare the model with all predictor versus one that does not include the hasGarage predictor, we see the p-value significant at 0.94, so we fail to reject the null hypothesis. We'll continue the analysis with the hasGarage predictor. 
+
+# 3. Model Buidling
+
+Now that we've cleaned the dataset by removing outliers and predictors that may not be helpful, we'll start looking at options to build an optimal model. We will build an additive and an interactive model, perform some model selection analysis and diagnostics to chose a model that best represents our dataset and purpose. 
+
+## 3.1 Additive model
+
+Let's build an additive model with all available predictors. 
+
+```{r warning=FALSE}
+
+model_measures = function(models, names){
+
+  df = data.frame(matrix(nrow = 4, ncol = length(names)))
+  # assign row names
+  rownames(df) = c("Number Of Predictors", "RSquare", "Adj. RSquare", "LOOCV_RMSE")
+  # assign column names
+  colnames(df) = names
+  
+  for(i in 1:length(models)) { 
+    model = models[[i]]
+    
+    num_of_predictors = length(coef(model))
+    adj_rsquare = summary(model)$adj.r.squared
+    rsquare = summary(model)$r.squared
+    loocv_rmse = sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+  
+    df[i] =  c( num_of_predictors, adj_rsquare, rsquare, loocv_rmse)
+  }
+  knitr::kable(df, "simple")
+}
+
+housing_data_model = lm(latestPrice ~ ., data = housing_data_train)
+model_measures(list(housing_data_model), c("Additive Model"))
+```
+
+We will find the significant variables with alpha 0.05.
+
+```{r}
+alpha = 0.05
+variables_significant =  summary(housing_data_model)$coef[, 'Pr(>|t|)'] < alpha
+variableNames_significant = names(variables_significant[variables_significant == TRUE][-1])
+
+predictors = paste(variableNames_significant, collapse = "+")
+predictors
+
+housing_data_model_significant =  lm(
+  latestPrice ~ zipcode + longitude + propertyTaxRate + hasAssociation + yearBuilt +
+    numPriceChanges + latest_saleyear + numOfPatioAndPorchFeatures + lotSizeSqFt +
+    livingAreaSqFt + numOfPrimarySchools + numOfElementarySchools + numOfHighSchools +
+    avgSchoolDistance + avgSchoolRating + avgSchoolSize + numOfBathrooms + numOfBedrooms,
+  data = housing_data_train
+)
+
+anova(housing_data_model, housing_data_model_significant)
+
+model_measures(
+  list(housing_data_model, housing_data_model_significant),
+  c("All predictors", "Significant predictors")
+)
+
+housing_data_model = housing_data_model_significant
+```
+
+From the $R^2$ value, about `r summary(housing_data_model)$r.squared` of data is explained by this model, with `r length(variables_significant)` predictors. Next, we will try to find a “better” model with $R^2$ greater than `r summary(housing_data_model)$r.squared`, or adjusted $R^2$  greater than `r summary(housing_data_model)$adj.r.squared`. 
+
+We'll also try to lower the value of LOOCV_RMSE (< 110989) to explain the data. Next, we'll investigate how well backwards AIC and BIC performs in the additive model.
+
+```{r warning=FALSE}
+## Additive model AIC and BIC
+
+housing_data_model_aic = step(housing_data_model, direction = "backward", trace = 0)
+extractAIC(housing_data_model_aic) # returns both p and AIC
+
+summary(housing_data_model_aic)$adj.r.squared
+
+housing_data_model_bic = step(
+  housing_data_model,
+  direction = "backward",
+  trace = 0,
+  k = log(nrow(housing_data_numerical))
+)
+extractAIC(housing_data_model_bic)  # returns both p and AIC
+summary(housing_data_model_bic)$adj.r.squared
+```
+
+The adjusted $R^2$ values are `r summary(housing_data_model_aic)$adj.r.squared` for the AIC model, and `r summary(housing_data_model_bic)$adj.r.squared` for the BIC model. Both of them are inferior to the additive model before backwards AIC and BIC. 
+
+As another attempt, we'll use **exhaustive search** to test every possible model and see if we can find a better one. 
+
+```{r}
+library(leaps)
+
+housing_data_model_leaps = summary(regsubsets(latestPrice ~ ., data = housing_data_train))
+housing_data_model_leaps$rss
+housing_data_model_leaps$adjr2
+
+housing_data_model_leaps_r2_index = which.max(housing_data_model_leaps$adjr2)
+housing_data_model_leaps$which[housing_data_model_leaps_r2_index,]
+
+housing_data_model_leaps_best = lm(
+  latestPrice ~ zipcode + propertyTaxRate + hasAssociation + latest_saleyear + yearBuilt + numPriceChanges + numOfWaterfrontFeatures +  avgSchoolSize +
+    livingAreaSqFt + avgSchoolRating ,
+  data = housing_data_train
+)
+
+anova(housing_data_model, housing_data_model_leaps_best)[2, "Pr(>F)"]
+```
+
+From anova results, the p-value < 2e-16 is significantly small and null hypothesis can be rejected. Considering the leaps model, we shall continue to perform model improvements techniques.
+
+## 3.2. Interactive model
+
+We'll now build an interactive model. 
+
+```{r}
+housing_data_model_interaction = lm(
+  latestPrice ~ (
+    zipcode + propertyTaxRate + hasAssociation + yearBuilt +
+      numPriceChanges + numOfWaterfrontFeatures + avgSchoolSize + livingAreaSqFt + latest_saleyear + avgSchoolRating
+  ) ^ 2,
+  data = housing_data_train
+)
+
+summary(housing_data_model_interaction)
+
+length(coef(housing_data_model_interaction))
+
+summary(housing_data_model_interaction)$r.squared 
+summary(housing_data_model_interaction)$adj.r.squared 
+```
+
+From the $R^2$ value, about `r summary(housing_data_model_interaction)$r.squared` of data is explained by this model, with `r length(coef(housing_data_model_interaction))` predictors. The adjusted $R^2$  is `r summary(housing_data_model_interaction)$adj.r.squared`. This model is preferred over the additive model. 
+
+Let's compare the interactive model with the original model: 
+
+```{r}
+anova(housing_data_model, housing_data_model_interaction)[2, "Pr(>F)"]
+```
+
+With a p-value of 2.438e-49, we can reject the null hypothesis and choose this model.
+
+Similarly to what we did with the additive model, we'll investigate how well backwards AIC and BIC performs in the interactive model.
+
+```{r}
+housing_data_model_interaction_aic = step(housing_data_model_interaction,
+                                          direction = "backward",
+                                          trace = 0)
+extractAIC(housing_data_model_interaction_aic) # returns both p and AIC
+housing_data_model_interaction_aic
+summary(housing_data_model_interaction_aic)$adj.r.squared
+
+housing_data_model_interaction_bic = step(
+  housing_data_model_interaction,
+  direction = "backward",
+  trace = 0,
+  k = log(nrow(housing_data_numerical))
+)
+
+extractAIC(housing_data_model_interaction_bic)  # returns both p and AIC
+summary(housing_data_model_interaction_bic)$adj.r.squared
+```
+
+The adjusted $R^2$ values are `r summary(housing_data_model_interaction_aic)$adj.r.squared` for the AIC model, and `r summary(housing_data_model_interaction_bic)$adj.r.squared` for the BIC model. Both of them are superior to the additive model and the original model. **The interaction model with backwards AIC (housing_data_model_interaction_aic) is the preferred model so far.**
+
+## 3.4. Diagnostics
+
+To perform model diagnostics, we'll define a helper function which shows the **Fitted versus Residuals** plot, the **Normal Q-Q Plot**,  the **Histogram of Residuals**, prints the result of the **Breusch-Pagan Test**, and **Shapiro-Wilk Test** for assessing the normality of errors.
+
+```{r}
+diagnostics = function (model) {
+  par(mfrow = c(1, 3))
+  
+  plot(
+    fitted(model),
+    resid(model),
+    pch = 20,
+    xlab = "Fitted Values",
+    ylab = "Residuals",
+    main = "Fitted vs Residuals",
+    col = "grey"
+  )
+  
+  abline(h = 0, lwd = 2, col = "orange")
+  
+  qqnorm(resid(model),
+         pch = 20,
+         main = "Normal Q-Q Plot",
+         col = "grey")
+  qqline(resid(model), lwd = 2, col =  "orange")
+  
+  hist(
+    resid(model),
+    main = "Histogram of Residuals",
+    col = "orange",
+    xlab = "Residuals",
+    ylab = "Frequency"
+  )
+  
+  library(lmtest)
+  bptest(model)
+  shapiro.test(resid(model))
+}
+```
+
+Having defined the funcion, let's visualize the plots for the chosen model **housing_data_model_interaction_aic**:
+
+```{r}
+diagnostics(housing_data_model_interaction_aic)
+```
+
+The Fitted versus Residuals plot shows the spread of residuals for many fitted values away from zero in the order of 200.000. The Q-Q Plot and the Histogram of Residuals show data points away from the line from -2 to 1 Theoretical Quantiles. This is a suspect Q-Q plot, leading to believe that the errors **do not follow** a normal distribution. 
+
+## 3.5. Outliers
+
+To try to identify the issues shown on model diagnistics, we'll look for influential observations that have large effect on the regression. To measure this, we'll use **Cook's Distance.**
+
+```{r}
+cooksd = cooks.distance(housing_data_model_interaction_aic)
+
+plot(cooksd,
+     pch = "*",
+     cex = 2,
+     main = "Influential Observations by Cooks distance")  # plot cook's distance
+abline(h = 2 * mean(cooksd, na.rm = T), col = "black")  # add cutoff line
+
+text(
+  x = 1:length(cooksd) + 1,
+  y = cooksd,
+  labels = ifelse(cooksd > 2 * mean(cooksd, na.rm = T), names(cooksd), ""),
+  col = "red"
+)  # add labels
+```
+
+Now that we've identified the outliers and stored the results in the **cooksd** variable, we'll build a new model without these outliers and run diagnostics again. 
+
+```{r} 
+
+housing_data_model_interaction_aic_without_outliers = lm(
+  latestPrice ~ zipcode + propertyTaxRate + hasAssociation + 
+    yearBuilt + numPriceChanges + numOfWaterfrontFeatures + avgSchoolSize + 
+    livingAreaSqFt + latest_saleyear + avgSchoolRating + zipcode:numPriceChanges + 
+    zipcode:numOfWaterfrontFeatures + zipcode:avgSchoolSize + 
+    zipcode:livingAreaSqFt + propertyTaxRate:hasAssociation + 
+    propertyTaxRate:yearBuilt + propertyTaxRate:avgSchoolSize + 
+    propertyTaxRate:livingAreaSqFt + propertyTaxRate:avgSchoolRating + 
+    hasAssociation:yearBuilt + hasAssociation:numPriceChanges + 
+    hasAssociation:avgSchoolSize + hasAssociation:livingAreaSqFt + 
+    hasAssociation:latest_saleyear + hasAssociation:avgSchoolRating + 
+    yearBuilt:numOfWaterfrontFeatures + yearBuilt:avgSchoolSize + 
+    yearBuilt:latest_saleyear + yearBuilt:avgSchoolRating + numPriceChanges:livingAreaSqFt + 
+    numPriceChanges:latest_saleyear + avgSchoolSize:livingAreaSqFt + 
+    avgSchoolSize:latest_saleyear + avgSchoolSize:avgSchoolRating + 
+    livingAreaSqFt:avgSchoolRating,
+  data = housing_data_train,
+  subset = cooksd < 2 * mean(cooksd, na.rm = T)
+)
+
+diagnostics(housing_data_model_interaction_aic_without_outliers)
+bptest(housing_data_model_interaction_aic_without_outliers)
+```
+
+The Fitted versus Residuals plot shows the spread of residuals for many fitted values away from zero in the order of hundreds of thousands, but at half the distance from the mean when compared to the previous model. Also, the Q-Q Plot and the Histogram of Residuals show data points close to line, meaning errors **follow** a normal distribution. 
+
+Finally, we'll use a box cox transformation on our model to improve the constant variance.
+
+```{r}
+library(MASS)
+boxcox(
+  housing_data_model_interaction_aic_without_outliers,
+  plotit = TRUE,
+  lambda = seq(0, 1, by = 0.05)
+)
+
+housing_data_model_interaction_aic_without_outliers = lm((((latestPrice ^ 0.5) - 1) / 0.5) ~ zipcode + propertyTaxRate + hasAssociation + yearBuilt + numPriceChanges + numOfWaterfrontFeatures + avgSchoolSize + livingAreaSqFt + latest_saleyear + avgSchoolRating + zipcode:numPriceChanges + zipcode:numOfWaterfrontFeatures + zipcode:avgSchoolSize + zipcode:livingAreaSqFt + propertyTaxRate:hasAssociation + propertyTaxRate:yearBuilt + propertyTaxRate:avgSchoolSize + propertyTaxRate:livingAreaSqFt + propertyTaxRate:avgSchoolRating + hasAssociation:yearBuilt + hasAssociation:numPriceChanges + hasAssociation:avgSchoolSize + hasAssociation:livingAreaSqFt + hasAssociation:latest_saleyear + hasAssociation:avgSchoolRating + yearBuilt:numOfWaterfrontFeatures + yearBuilt:avgSchoolSize + yearBuilt:latest_saleyear + yearBuilt:avgSchoolRating + numPriceChanges:livingAreaSqFt + numPriceChanges:latest_saleyear + avgSchoolSize:livingAreaSqFt + avgSchoolSize:latest_saleyear + avgSchoolSize:avgSchoolRating + livingAreaSqFt:avgSchoolRating,
+                                                         data = housing_data_train,
+                                                         subset = cooksd < 2 * mean(cooksd, na.rm = T)
+)
+
+diagnostics(housing_data_model_interaction_aic_without_outliers)
+bptest(housing_data_model_interaction_aic_without_outliers)
+```
+ 
+As seen in box cox transformation, the mean of the normal distribution is centered around 0.43. We tried using 0.43 to 0.50 as exponential formula as per the box cox transformation, and we got best model at 0.50. Our p-value for normal distribution is 0.4, however, constant variation is still showing a low p-value. As we improved a lot based on the original Fitted versus Residual plot, we are choosing the **interactive model with backwards AIC without outliers (housing_data_model_interaction_aic_without_outliers)** as our final model after applying box cox transformation. 
+
+Lastly, we will calculate the error and noise with the final model for both the test and train data frames. We to perform reverse transformation (box cox applied on the model) on sigma of the model to get the final error value.
+
+For illustration, here's the variance for the original model (additive):
+
+```{r}
+sigma(lm(latestPrice ~ ., data = housing_data_train))
+sigma(lm(latestPrice ~ ., data = housing_data_test))
+```
+
+And the error obtained from the chosen model:
+
+```{r}
+error_raw = sigma(housing_data_model_interaction_aic_without_outliers)
+error = (error_raw ^2 + 1) * 0.5
+error
+```
+
+This small error value shows the greater accuracy of model.
+
+```{r}
+housing_data_model_interaction_aic_without_outliers = lm((((latestPrice ^ 0.5) - 1) / 0.5) ~ zipcode + propertyTaxRate + hasAssociation + yearBuilt + numPriceChanges + numOfWaterfrontFeatures + avgSchoolSize + livingAreaSqFt + latest_saleyear + avgSchoolRating + zipcode:numPriceChanges + zipcode:numOfWaterfrontFeatures + zipcode:avgSchoolSize + zipcode:livingAreaSqFt + propertyTaxRate:hasAssociation + propertyTaxRate:yearBuilt + propertyTaxRate:avgSchoolSize + propertyTaxRate:livingAreaSqFt + propertyTaxRate:avgSchoolRating + hasAssociation:yearBuilt + hasAssociation:numPriceChanges + hasAssociation:avgSchoolSize + hasAssociation:livingAreaSqFt + hasAssociation:latest_saleyear + hasAssociation:avgSchoolRating + yearBuilt:numOfWaterfrontFeatures + yearBuilt:avgSchoolSize + yearBuilt:latest_saleyear + yearBuilt:avgSchoolRating + numPriceChanges:livingAreaSqFt + numPriceChanges:latest_saleyear + avgSchoolSize:livingAreaSqFt + avgSchoolSize:latest_saleyear + avgSchoolSize:avgSchoolRating + livingAreaSqFt:avgSchoolRating,
+                                                         data = housing_data_test,
+                                                         subset = cooksd < 2 * mean(cooksd, na.rm = T)
+)
+error_raw = sigma(housing_data_model_interaction_aic_without_outliers)
+error = (error_raw ^ 2 + 1) * 0.5
+error
+```
+
+RMSE errors for train and test data (respectivelly): 
+
+```{r, warning=FALSE}
+library(Metrics)
+
+predictions_train = predict(housing_data_model_interaction_aic_without_outliers,
+                            housing_data_train)
+error_1 = rmse(((housing_data_train$latestPrice ^ 0.5 - 1) / 0.5), predictions_train)
+
+(error_1 ^ 2 + 1) * 0.5
+
+predictions_test = predict(housing_data_model_interaction_aic_without_outliers,
+                           housing_data_test)
+error_1 = rmse(((housing_data_test$latestPrice ^ 0.5 - 1) / 0.5), predictions_test)
+
+(error_1 ^ 2 + 1) * 0.5
+```
+
+# 4. Conclusion
+
+Through this project, we've built a model that would help home buyers predict house prices in Austin, TX and surrounding cities and towns. Using data obtained from house sale listings on zillow.com, we were able to produce a clean data set to work with, verify the predictors for relevancy and collinearity, and adjusted the dataset based on findings of this analysis. 
+
+Model building considered several techniques, including the use of additive or interactive models, and the use of backwards AIC and BIC to find an optimal model the model. Having identified the model of choice, the **interactive model with backwards AIC without outliers**, we've performed diagnostics and fine tuning using an analysis of outliers to reduce errors and increase the accuracy of the model.
+
+# Links and citations
+
+## Appendix A: about Team 42 PST
+
+Our team is formed by the following individuals: 
+
+- Jagadeesh Kedarisetty (jk64)
+
+- Nilesh Bhandarwar (nileshb2)
+
+- Peri Rocha (procha2)
+
+## Appendix B: libraries used
+
+The following libraries were used in the creation of this report: 
+
+**- ggmap**
+  
+    D. Kahle and H. Wickham. ggmap: Spatial Visualization with ggplot2.
+    
+    The R Journal, 5(1), 144-161. URL
+    
+    http://journal.r-project.org/archive/2013-1/kahle-wickham.pdf
+    
+**- ggplot2**
+  
+    H. Wickham. ggplot2: Elegant Graphics for Data Analysis.
+    
+    Springer-Verlag New York, 2016.
+  
+**- faraway**
+  
+    Julian Faraway (2016). faraway: Functions and Datasets for Books
+  
+    by Julian Faraway. R package version 1.0.7.
+  
+    https://CRAN.R-project.org/package=faraway
+  
+**- MASS**
+  
+    Venables, W. N. & Ripley, B. D. (2002) Modern Applied Statistics with S. Fourth Edition. Springer, New York.
+    ISBN 0-387-95457-0
+
+**- lmtest**
+  
+    Achim Zeileis, Torsten Hothorn (2002). Diagnostic Checking in
+    
+    Regression Relationships. R News 2(3), 7-10. URL
+    
+    https://CRAN.R-project.org/doc/Rnews/
+  
+**- leaps**
+  
+    Thomas Lumley based on Fortran code by Alan Miller (2020). leaps: Regression Subset Selection. R package version 3.1. https://CRAN.R-project.org/package=leaps
+    
+**- Metrics**
+
+    Ben Hamner and Michael Frasco (2018). Metrics: Evaluation Metrics for Machine Learning. R package version 0.1.4.
+    
+    https://CRAN.R-project.org/package=Metrics  
+    
+## Appendix C: links
+
+[^1]:"How To Succeed As A First-Time Home Buyer In Today’s Market" (https://www.forbes.com/sites/forbesrealestatecouncil/2021/07/19/how-to-succeed-as-a-first-time-home-buyer-in-todays-market/?sh=79e0d37f19f8)
+[^2]:"Your 4 Most Important Financial Decisions: #1 – The House Purchase" (https://www.retirementstewardship.com/2016/05/28/4-important-financial-decisions-1-house-purchase/)
+[^3]:"Why hot-desking is a terrible idea" (https://www.msn.com/en-us/lifestyle/career/why-hot-desking-is-a-terrible-idea/ar-AAMjgTM?ocid=BingNewsSearch)
+[^4]: [Kaggle](https://www.kaggle.com/) dataset: "Austin, TX House Listings - Features and Images scraped in January 2021". (https://www.kaggle.com/ericpierce/austinhousingprices, `austinHousingData.csv`).
